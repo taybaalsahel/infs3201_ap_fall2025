@@ -1,21 +1,30 @@
-<h1>Edit Photo #{{photo.id}}</h1>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Edit Photo</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Editing Photo</h1>
 
-{{#if error}}
-  <p style="color:red">{{error}}</p>
-{{/if}}
+    {{#if error}}
+      <p style="color:red;">{{error}}</p>
+    {{/if}}
 
-<form method="POST" action="/edit-photo">
-  <input type="hidden" name="pid" value="{{photo.id}}">
-  <p>
-    <label>Title<br>
-      <input name="title" value="{{photo.title}}">
-    </label>
-  </p>
-  <p>
-    <label>Description<br>
-      <textarea name="description" rows="4">{{photo.description}}</textarea>
-    </label>
-  </p>
-  <button type="submit">Submit</button>
-  <a href="/photo-details/{{photo.id}}">Cancel</a>
-</form>
+    <form method="post" action="/edit-photo">
+      <input type="hidden" name="pid" value="{{photo.id}}">
+      <label>Title:</label>
+      <input type="text" name="title" value="{{photo.title}}">
+
+      <label>Description:</label>
+      <textarea name="description">{{photo.description}}</textarea>
+
+      <input type="submit" value="Save">
+    </form>
+
+    <p><a href="/photo-details/{{photo.id}}">← Back to photo details</a></p>
+  </div>
+</body>
+</html>
