@@ -1,120 +1,127 @@
 // persistence.js
-const fs = require('fs/promises')
-const path = require('path')
+// MongoDB persistence layer for Digital Media Catalog A3.
+// Handles connection setup, health ping, and all DB operations (no JSON files).
 
-const PHOTOS_FILE = path.join(__dirname, 'photos.json')
-const ALBUMS_FILE = path.join(__dirname, 'albums.json')
-const USERS_FILE = path.join(__dirname, 'users.json')
+const { MongoClient } = require('mongodb');
 
-/**
- * Read a JSON file and return parsed value (tolerant to BOM/zero-width chars)
- * @param {string} filePath
- * @returns {Promise<any>}
- */
-async function readJson(filePath) {
-    const textRaw = await fs.readFile(filePath, 'utf8')
-    // Strip BOM and common zero-width/invisible chars that break JSON.parse
-    const text = textRaw.replace(/^[\uFEFF\u200B\u200E\u200F]+/, '')
-    return JSON.parse(text)
-}
-
+const DB_NAME = 'infs3201_fall2025';
+let client, db, initPromise;
 
 /**
- * Write a value to a JSON file (pretty)
- * @param {string} filePath
- * @param {any} value
- * @returns {Promise<void>}
+ * Build the MongoDB connection URI.
+ * Accepts either MONGODB_URI directly, or MDB_USER/MDB_PASS/MDB_HOST env vars.
+ * @returns {string} MongoDB connection string
+ * @throws {Error} if credentials are missing
  */
-async function writeJson(filePath, value) {
-    const text = JSON.stringify(value, null, 2)
-    await fs.writeFile(filePath, text, 'utf8')
+function buildUri() {
+  if (process.env.MONGODB_URI) return process.env.MONGODB_URI;
+  const u = process.env.MDB_USER;
+  const p = process.env.MDB_PASS ? encodeURIComponent(process.env.MDB_PASS) : '';
+  const h = process.env.MDB_HOST;
+  if (u && p && h) {
+    return `mongodb+srv://${u}:${p}@${h}/?retryWrites=true&w=majority&authSource=admin`;
+  }
+  throw new Error('Missing Mongo credentials: set MONGODB_URI or MDB_USER/MDB_PASS/MDB_HOST');
 }
 
 /**
- * Get user by username (or null)
- * @param {string} username
- * @returns {Promise<object|null>}
+ * Initialize MongoDB client once per process and verify with a ping.
+ * Reuses the same promise if already in progress.
+ * @returns {Promise<import('mongodb').Db>} Connected database instance
  */
-async function getUserByUsername(username) {
-    const users = await readJson(USERS_FILE)
-    var i = 0
-    while (i < users.length) {
-        if (users[i] && users[i].username === username) return users[i]
-        i = i + 1
-    }
-    return null
+async function init() {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    const uri = buildUri();
+    client = new MongoClient(uri);
+    await client.connect();                          // connect per driver docs
+    await client.db(DB_NAME).command({ ping: 1 });   // sanity check ping 
+    db = client.db(DB_NAME);
+    console.log('✅ Mongo connected & ping OK');
+    return db;
+  })();
+  return initPromise;
 }
 
 /**
- * Get photo by id (or null)
- * @param {number} photoId
- * @returns {Promise<object|null>}
+ * Return current DB instance, waiting for initialization if necessary.
+ * @returns {Promise<import('mongodb').Db>}
  */
-async function getPhotoById(photoId) {
-    const photos = await readJson(PHOTOS_FILE)
-    var i = 0
-    while (i < photos.length) {
-        if (photos[i] && photos[i].id === photoId) return photos[i]
-        i = i + 1
-    }
-    return null
+async function getDb() {
+  if (!db) await init();
+  if (!db) throw new Error('Mongo DB not initialized');
+  return db;
+}
+
+// ---------------------- Repository methods ----------------------
+
+/**
+ * List all albums (no _id field).
+ * @returns {Promise<Array<{id:number,name:string,description?:string}>>}
+ */
+async function listAlbums() {
+  const col = (await getDb()).collection('albums');
+  const out = [];
+  const cur = col.find({}, { projection: { _id: 0 } });
+  for await (const d of cur) out.push(d);
+  return out;
 }
 
 /**
- * Save updated photo back to photos.json
- * @param {object} updated
- * @returns {Promise<void>}
+ * Get an album by id.
+ * @param {number|string} id - Album ID
+ * @returns {Promise<{id:number,name:string,description?:string}|null>}
  */
-async function updatePhoto(updated) {
-    const photos = await readJson(PHOTOS_FILE)
-    var i = 0
-    while (i < photos.length) {
-        if (photos[i] && photos[i].id === updated.id) {
-            photos[i] = updated
-            await writeJson(PHOTOS_FILE, photos)
-            return
-        }
-        i = i + 1
-    }
+async function getAlbumById(id) {
+  return (await getDb()).collection('albums')
+    .findOne({ id: Number(id) }, { projection: { _id: 0 } });
 }
 
 /**
- * Get album by exact name (case-insensitive match is handled in business)
- * @param {string} name
- * @returns {Promise<object|null>}
+ * List photos belonging to a specific album.
+ * @param {number|string} albumId
+ * @returns {Promise<Array<{id:number,filename:string,title:string,description:string,albums:number[]}>>}
  */
-async function getAlbumByName(name) {
-    const albums = await readJson(ALBUMS_FILE)
-    var i = 0
-    while (i < albums.length) {
-        if (albums[i] && typeof albums[i].name === 'string' && albums[i].name === name) return albums[i]
-        i = i + 1
-    }
-    return null
+async function listPhotosByAlbum(albumId) {
+  const col = (await getDb()).collection('photos');
+  const out = [];
+  const cur = col.find({ albums: Number(albumId) }, { projection: { _id: 0 } });
+  for await (const d of cur) out.push(d);
+  return out;
 }
 
 /**
- * Get all photos (array)
- * @returns {Promise<Array>}
+ * Get a single photo by id.
+ * @param {number|string} id
+ * @returns {Promise<{id:number,filename:string,title:string,description:string,albums:number[]} | null>}
  */
-async function getAllPhotos() {
-    return await readJson(PHOTOS_FILE)
+async function getPhotoById(id) {
+  return (await getDb()).collection('photos')
+    .findOne({ id: Number(id) }, { projection: { _id: 0 } });
 }
 
 /**
- * Get all albums (array)
- * @returns {Promise<Array>}
+ * Update the title/description metadata of a photo.
+ * Returns true only if one document was matched and modified.
+ *
+ * @param {number|string} id - Photo ID
+ * @param {?string} title - New title (or null to skip)
+ * @param {?string} description - New description (or null to skip)
+ * @returns {Promise<boolean>} True if exactly one document was modified
  */
-async function getAllAlbums() {
-    return await readJson(ALBUMS_FILE)
+async function updatePhotoMeta(id, title, description) {
+  const r = await (await getDb()).collection('photos').updateOne(
+    { id: Number(id) },
+    { $set: { title, description } }
+  );
+  return r.matchedCount === 1 && r.modifiedCount === 1;
 }
 
 module.exports = {
-    getUserByUsername,
-    getPhotoById,
-    updatePhoto,
-    getAlbumByName,
-    getAllPhotos,
-    getAllAlbums
-}
-
+  init,
+  listAlbums,
+  getAlbumById,
+  listPhotosByAlbum,
+  getPhotoById,
+  updatePhotoMeta
+};
