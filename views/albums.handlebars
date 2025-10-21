@@ -1,6 +1,18 @@
-<h1>Albums</h1>
-<ul>
-  {{#each albums}}
-    <li><a href="/album/{{id}}">{{name}}</a> — {{description}}</li>
-  {{/each}}
-</ul>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Photo Albums</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Photo Albums</h1>
+    <ul>
+      {{#each albums}}
+        <li><a href="/album/{{id}}">{{name}}</a></li>
+      {{/each}}
+    </ul>
+  </div>
+</body>
+</html>
