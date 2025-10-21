@@ -1,0 +1,9 @@
+<h1>{{albumName}}</h1>
+<p>{{count}} {{#if (eq count 1)}}photo{{else}}photos{{/if}}</p>
+<ul>
+  {{#each photos}}
+    <li>
+      <a href="/photo-details/{{id}}">{{title}}</a> — {{description}}
+    </li>
+  {{/each}}
+</ul>

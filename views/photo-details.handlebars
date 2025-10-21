@@ -1,0 +1,15 @@
+<h1>{{photo.title}}</h1>
+<p>{{photo.description}}</p>
+
+<img src="/photos/{{photo.filename}}" alt="{{photo.title}}" style="max-width:300px">
+
+<p><strong>ID:</strong> {{photo.id}}</p>
+{{#if photo.date}}<p><strong>Date:</strong> {{photo.date}}</p>{{/if}}
+{{#if photo.resolution}}<p><strong>Resolution:</strong> {{photo.resolution}}</p>{{/if}}
+{{#if photo.tags}}
+  <p><strong>Tags:</strong>
+    {{#each photo.tags}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+  </p>
+{{/if}}
+
+<p><a href="/edit-photo?pid={{photo.id}}">edit</a></p>
